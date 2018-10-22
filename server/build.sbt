@@ -23,4 +23,6 @@ libraryDependencies ++= Seq(
   "io.surfkit" %% "type-bus" % "0.0.5-SNAPSHOT"
 )
 
+mainClass in (Compile, run) := Some("org.squbs.unicomplex.Bootstrap")
+
 

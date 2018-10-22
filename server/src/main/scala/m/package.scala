@@ -9,8 +9,14 @@ package object m {
   final case class Ingredient(name: String, sugar: Double, fat: Double) extends Model
   final case class Pizza(name: String, ingredients: Seq[Ingredient], vegetarian: Boolean, vegan: Boolean, calories: Int) extends Model
 
+  final case class Dog(name: String) extends Model
 
-  val schema = AvroSchema[Pizza]
-  implicit val format = RecordFormat[Pizza]
+  final case class SEvent(correlationId: String, payload: Model) extends Model
+
+  val schema = AvroSchema[SEvent]
+  implicit val format = RecordFormat[SEvent]
+
+
 
 }
+

@@ -71,24 +71,106 @@
 	Object.defineProperty(exports, "__esModule", { value: true });
 	var avro = __webpack_require__(1);
 	exports.zeroId = "00000000-0000-0000-0000-000000000000";
-	var user1 = {
-	    $type: "m.u.User",
-	    id: exports.zeroId,
-	    name: "roger",
-	    avatar: "fart.jpg",
-	    crm: [],
-	    team: exports.zeroId,
-	    providers: [
-	        { $type: "m.u.Email", id: "test@test.com" },
-	        { $type: "m.u.Email", id: "test@test2.com" }
-	    ]
+	var pizza1 = {
+	    name: "yum yum",
+	    ingredients: [
+	        { name: "tomato", sugar: 10, fat: 2 },
+	        { name: "cheese", sugar: 10, fat: 20 }
+	    ],
+	    vegetarian: true,
+	    vegan: false,
+	    calories: 225
 	};
-	var userType = avro.Type.forValue(user1);
+	var sevent1 = {
+	    correlationId: "testing",
+	    payload: (_a = {}, _a["m.Pizza"] = pizza1, _a)
+	};
+	var pizzaType = avro.Type.forValue(pizza1);
+	var pzType = avro.Type.forSchema({
+	    "type": "record",
+	    "name": "SEvent",
+	    "namespace": "m",
+	    "fields": [
+	        {
+	            "name": "correlationId",
+	            "type": "string"
+	        },
+	        {
+	            "name": "payload",
+	            "type": [
+	                {
+	                    "type": "record",
+	                    "name": "Dog",
+	                    "fields": [
+	                        {
+	                            "name": "name",
+	                            "type": "string"
+	                        }
+	                    ]
+	                },
+	                {
+	                    "type": "record",
+	                    "name": "Ingredient",
+	                    "fields": [
+	                        {
+	                            "name": "name",
+	                            "type": "string"
+	                        },
+	                        {
+	                            "name": "sugar",
+	                            "type": "double"
+	                        },
+	                        {
+	                            "name": "fat",
+	                            "type": "double"
+	                        }
+	                    ]
+	                },
+	                {
+	                    "type": "record",
+	                    "name": "Pizza",
+	                    "fields": [
+	                        {
+	                            "name": "name",
+	                            "type": "string"
+	                        },
+	                        {
+	                            "name": "ingredients",
+	                            "type": {
+	                                "type": "array",
+	                                "items": "Ingredient"
+	                            }
+	                        },
+	                        {
+	                            "name": "vegetarian",
+	                            "type": "boolean"
+	                        },
+	                        {
+	                            "name": "vegan",
+	                            "type": "boolean"
+	                        },
+	                        {
+	                            "name": "calories",
+	                            "type": "int"
+	                        }
+	                    ]
+	                },
+	                "SEvent"
+	            ]
+	        }
+	    ]
+	});
 	var bufs = [
-	    userType.toBuffer(user1)
+	    pzType.toBuffer(sevent1)
 	];
 	console.log("bufs: ", bufs);
-	console.log("back: ", userType.fromBuffer(bufs[0]));
+	console.log("back: ", pzType.fromBuffer(bufs[0]));
+	var ws = new WebSocket("ws://localhost:8181/v1/ws/56e32f7e-8350-4892-8c9c-0fd6faea36f8");
+	ws.onopen = function (event) {
+	    console.log("WEBSOCKET IS CONNECTED !!!");
+	    ws.send(pzType.toBuffer(sevent1));
+	};
+	var _a;
 
 
 /***/ },
@@ -2552,6 +2634,9 @@
 	      } else {
 	        this._needPush = true;
 	      }
+	      if (data) {
+	        data.cb();
+	      }
 	      return; // Wait for more data.
 	    }
 	    data.cb();
@@ -2870,7 +2955,8 @@
 	
 	
 	module.exports = {
-	  HEADER_TYPE: HEADER_TYPE, // For tests.
+	  BLOCK_TYPE: BLOCK_TYPE, // For tests.
+	  HEADER_TYPE: HEADER_TYPE, // Idem.
 	  MAGIC_BYTES: MAGIC_BYTES, // Idem.
 	  streams: {
 	    BlockDecoder: BlockDecoder,
@@ -5812,6 +5898,8 @@
 	      return this._fromJSON(this._toJSON(val));
 	  }
 	};
+	
+	AbstractLongType.prototype._deref = function () { return 'long'; }
 	
 	AbstractLongType.prototype._update = function (resolver, type) {
 	  var self = this;

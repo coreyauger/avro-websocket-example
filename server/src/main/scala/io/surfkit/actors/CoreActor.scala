@@ -99,6 +99,7 @@ class CoreActor extends Actor with ActorLogging {
       //println(s"@@@@ MSG: ${msg}")
       // CA - record stats
       val produce = msg.toPublishedEvent
+      println(s"TO PUBLISH EVENT: ${produce}")
       //ClusterStats.inc(ClusterStats.StatCategory.Socket, coreMessage.data.getClass.getName)
       //if(!produce.payload.isInstanceOf[m.Hb]) { // don't log heartbeat..
       //  log.info(s"ReceivedMessage for user(${msg.uuid}):  ${produce}")

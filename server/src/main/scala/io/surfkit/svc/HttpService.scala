@@ -22,9 +22,7 @@ import headers._
 import HttpMethods._
 import com.sksamuel.avro4s._
 import io.surfkit.actors.CoreActor
-import io.surfkit.typebus.ByteStreamWriter
-import m.Pizza
-import org.apache.avro.Schema.Field
+import io.surfkit.typebus.module.Service
 import org.apache.avro.generic.GenericRecord
 
 object ActorPaths {
@@ -32,7 +30,7 @@ object ActorPaths {
   val coreActorPath = "/user/avro-websocket-example/core"
 }
 
-class CoreHttpService extends RouteDefinition{
+class CoreHttpService extends RouteDefinition with Service {
   implicit val system = context.system
   import system.dispatcher
 
@@ -54,6 +52,10 @@ class CoreHttpService extends RouteDefinition{
   val useZipFs = config.getBoolean("www.use-zipfs") || Files.notExists(Paths.get(wwwPath))
   val useResourceDir = useZipFs && config.getBoolean("www.use-resource-dir")
 
+  println("CoreHttp is up and running !")
+
+  println(s"schema: \n${m.schema}")
+
   def route: Route =
       options {
         complete(HttpResponse(200).withHeaders(`Access-Control-Allow-Origin`.*, `Access-Control-Allow-Methods`(OPTIONS, POST, PUT, GET, DELETE)))
@@ -68,14 +70,12 @@ class CoreHttpService extends RouteDefinition{
           getFromDirectory(s"${wwwPath}/bundle.js")
         }
       } ~
-      path("v1.1" / "ws" / JavaUUID) { token =>
+      path("v1" / "ws" / JavaUUID) { token =>
         get{
           println("Handling WS connection")
           handleWebSocketMessages(websocketCoreFlow(sender = token.toString, token="" ))
         }
       }
-
-
 
 
 
@@ -87,7 +87,9 @@ class CoreHttpService extends RouteDefinition{
     val in =
       Flow[ByteString]
         .map{x =>
-          //logger.info(s"Get the message: ${x}")
+          println(s"Get the message: ${x}")
+
+
           try{
             implicit object SocketEventFromRecord extends FromRecord[SocketEvent[m.Model]] {
               override def apply(record: GenericRecord): SocketEvent[m.Model] = {
@@ -97,6 +99,29 @@ class CoreHttpService extends RouteDefinition{
                 null
               }
             }
+            /*implicit object PizzaFromRecord extends FromRecord[m.Pizza] {
+              override def apply(record: GenericRecord): m.Pizza = {
+                println("PizzaFromRecord *****************")
+                println(s"record: ${record}")
+                println("")
+                null
+              }
+            }*/
+
+            val schemax = AvroSchema[m.SEvent]
+            implicit val formatx = RecordFormat[m.SEvent]
+            val inx = new ByteArrayInputStream(x.toArray)
+            println(s"inx: ${inx}")
+            val inputx = AvroInputStream.binary[m.SEvent](inx)
+            println(s"inputx: ${inputx}")
+            println(s"inputx: ${inputx.iterator}")
+            val sevent = inputx.iterator.toSeq.head
+            println(s"input.iterator.toSeq: ${sevent}")
+
+
+            CoreActor.ReceivedMessage(userid, unique, SocketEvent[m.Model](correlationId = sevent.correlationId, occurredAt = org.joda.time.DateTime.now, payload = sevent.payload) )
+            /*
+
 
             val schema = AvroSchema[SocketEvent[m.Model]]
             implicit val format = RecordFormat[SocketEvent[m.Model]]
@@ -105,7 +130,7 @@ class CoreHttpService extends RouteDefinition{
             val result = input.iterator.toSeq
             val event = result.head
             //logger.info(s"obj: ${obj}")
-            CoreActor.ReceivedMessage(userid, unique, event)
+            CoreActor.ReceivedMessage(userid, unique, event)*/
           }catch{
             case t: Throwable =>
               t.printStackTrace()
