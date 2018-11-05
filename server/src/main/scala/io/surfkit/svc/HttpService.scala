@@ -31,7 +31,7 @@ object ActorPaths {
   val coreActorPath = "/user/avro-websocket-example/core"
 }
 
-class HttpService extends RouteDefinition with Service[m.Model] {
+class HttpService extends RouteDefinition {
   implicit val system = context.system
   import system.dispatcher
 
@@ -137,7 +137,7 @@ class HttpService extends RouteDefinition with Service[m.Model] {
           stream
             .limit(100) // Max frames we are willing to wait for
             .completionTimeout(5 seconds) // Max time until last frame
-            .runFold(ByteString.empty)(_ + _) // Merges the frames
+            .runFold(ByteString.empty)(_ ++ _) // Merges the frames
             .flatMap(msg => Future.successful(msg))
       }.mapAsync(parallelism = 3)(identity)
       .via(coreFlow(sender, token, UUID.randomUUID())) // ... and route them through the chatFlow ...

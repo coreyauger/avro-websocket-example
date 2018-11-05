@@ -58,11 +58,19 @@ class DemoService extends Actor with ActorLogging with Service[m.Model] {
     }
   }
 
-  def makePizza(x: m.Pizza, meta: EventMeta): Future[m.Pizza] = {
+  /*def makePizza(x: m.Pizza, meta: EventMeta): Future[m.Pizza] = {
     println("WE GOT A PIZZA HERE sports fans !!!!")
     println(x)
     println(s"meta: ${meta}")
     Future.successful(x)
+  }*/
+
+
+  def makePizza(x: m.Pizza, meta: EventMeta): Future[Unit] = {
+    println("WE GOT A PIZZA HERE sports fans !!!!")
+    println(x)
+    println(s"meta: ${meta}")
+    Future.successful(Unit)
   }
 
   println("Running !!!!")
