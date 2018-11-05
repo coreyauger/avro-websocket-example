@@ -81,96 +81,36 @@
 	    vegan: false,
 	    calories: 225
 	};
-	var sevent1 = {
-	    correlationId: "testing",
-	    payload: (_a = {}, _a["m.Pizza"] = pizza1, _a)
-	};
-	var pizzaType = avro.Type.forValue(pizza1);
-	var pzType = avro.Type.forSchema({
-	    "type": "record",
-	    "name": "SEvent",
-	    "namespace": "m",
-	    "fields": [
-	        {
-	            "name": "correlationId",
-	            "type": "string"
-	        },
-	        {
-	            "name": "payload",
-	            "type": [
-	                {
-	                    "type": "record",
-	                    "name": "Dog",
-	                    "fields": [
-	                        {
-	                            "name": "name",
-	                            "type": "string"
-	                        }
-	                    ]
-	                },
-	                {
-	                    "type": "record",
-	                    "name": "Ingredient",
-	                    "fields": [
-	                        {
-	                            "name": "name",
-	                            "type": "string"
-	                        },
-	                        {
-	                            "name": "sugar",
-	                            "type": "double"
-	                        },
-	                        {
-	                            "name": "fat",
-	                            "type": "double"
-	                        }
-	                    ]
-	                },
-	                {
-	                    "type": "record",
-	                    "name": "Pizza",
-	                    "fields": [
-	                        {
-	                            "name": "name",
-	                            "type": "string"
-	                        },
-	                        {
-	                            "name": "ingredients",
-	                            "type": {
-	                                "type": "array",
-	                                "items": "Ingredient"
-	                            }
-	                        },
-	                        {
-	                            "name": "vegetarian",
-	                            "type": "boolean"
-	                        },
-	                        {
-	                            "name": "vegan",
-	                            "type": "boolean"
-	                        },
-	                        {
-	                            "name": "calories",
-	                            "type": "int"
-	                        }
-	                    ]
-	                },
-	                "SEvent"
-	            ]
-	        }
-	    ]
-	});
+	var pizzaType = avro.Type.forSchema({ "type": "record", "name": "Pizza", "namespace": "m", "fields": [{ "name": "name", "type": "string" }, { "name": "ingredients", "type": { "type": "array", "items": { "type": "record", "name": "Ingredient", "fields": [{ "name": "name", "type": "string" }, { "name": "sugar", "type": "double" }, { "name": "fat", "type": "double" }] } } }, { "name": "vegetarian", "type": "boolean" }, { "name": "vegan", "type": "boolean" }, { "name": "calories", "type": "int" }] });
+	var socketEventType = avro.Type.forSchema({ "type": "record", "name": "SocketEvent", "namespace": "io.surfkit.typebus.event", "fields": [{ "name": "meta", "type": { "type": "record", "name": "EventMeta", "fields": [{ "name": "eventId", "type": "string" }, { "name": "eventType", "type": "string" }, { "name": "source", "type": "string" }, { "name": "correlationId", "type": ["null", "string"] }, { "name": "userId", "type": ["null", "string"], "default": null }, { "name": "socketId", "type": ["null", "string"], "default": null }, { "name": "responseTo", "type": ["null", "string"], "default": null }, { "name": "extra", "type": { "type": "map", "values": "string" }, "default": {} }] } }, { "name": "payload", "type": "bytes" }] });
 	var bufs = [
-	    pzType.toBuffer(sevent1)
+	    pizzaType.toBuffer(pizza1)
 	];
-	console.log("bufs: ", bufs);
-	console.log("back: ", pzType.fromBuffer(bufs[0]));
+	console.log("bufsz: ", bufs);
+	console.log("back: ", pizzaType.fromBuffer(bufs[0]));
+	var socketEvent = {
+	    meta: {
+	        eventId: "123",
+	        eventType: "m.package.Pizza",
+	        source: "",
+	        correlationId: null,
+	        userId: null,
+	        socketId: "55",
+	        responseTo: null,
+	        extra: {}
+	    },
+	    payload: pizzaType.toBuffer(pizza1)
+	};
+	var bufs2 = [
+	    socketEventType.toBuffer(socketEvent)
+	];
+	console.log("bufsz: ", bufs2);
+	console.log("back: ", socketEventType.fromBuffer(bufs2[0]));
 	var ws = new WebSocket("ws://localhost:8181/v1/ws/56e32f7e-8350-4892-8c9c-0fd6faea36f8");
 	ws.onopen = function (event) {
 	    console.log("WEBSOCKET IS CONNECTED !!!");
-	    ws.send(pzType.toBuffer(sevent1));
+	    ws.send(socketEventType.toBuffer(socketEvent));
 	};
-	var _a;
 
 
 /***/ },

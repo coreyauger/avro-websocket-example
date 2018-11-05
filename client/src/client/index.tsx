@@ -14,7 +14,7 @@ export interface Ingredient extends Model{
     sugar: number,
     fat: number    
 }
-
+ 
 export interface Pizza extends Model{
     name: string,
     ingredients: Ingredient[],
@@ -23,10 +23,22 @@ export interface Pizza extends Model{
     calories: number
 }
 
-export interface SEvent extends Model{
-    correlationId: string,
-    payload: Model
-}
+
+export interface EventMeta{
+    eventId: string,
+    eventType: string,
+    source: string,
+    correlationId?: string,
+    userId?: string,
+    socketId?: string,
+    responseTo?: string,
+    extra: any
+}  
+
+export interface SocketEvent{
+    meta: EventMeta,
+    payload: any[]
+} 
 
 //final case class Pizza(name: String, ingredients: Seq[Ingredient], vegetarian: Boolean, vegan: Boolean, calories: Int) extends Model
 
@@ -38,104 +50,50 @@ const pizza1 = {
   ],
   vegetarian: true,
   vegan: false,
-  calories: 225
+  calories: 225 
 } as Pizza
 
-const sevent1 = {
-    correlationId: "testing",
-    payload: { ["m.Pizza"]: pizza1 }
-} as SEvent
 
-const pizzaType = avro.Type.forValue(pizza1);
+const pizzaType = avro.Type.forSchema({"type":"record","name":"Pizza","namespace":"m","fields":[{"name":"name","type":"string"},{"name":"ingredients","type":{"type":"array","items":{"type":"record","name":"Ingredient","fields":[{"name":"name","type":"string"},{"name":"sugar","type":"double"},{"name":"fat","type":"double"}]}}},{"name":"vegetarian","type":"boolean"},{"name":"vegan","type":"boolean"},{"name":"calories","type":"int"}]});
 //const sType = avro.Type.forValue(sevent1);
 
-const pzType = avro.Type.forSchema({
-    "type": "record",
-    "name": "SEvent",
-    "namespace": "m",
-    "fields": [
-        {
-            "name": "correlationId",
-            "type": "string"
-        },
-        {
-            "name": "payload",
-            "type": [
-                {
-                    "type": "record",
-                    "name": "Dog",
-                    "fields": [
-                        {
-                            "name": "name",
-                            "type": "string"
-                        }
-                    ]
-                },
-                {
-                    "type": "record",
-                    "name": "Ingredient",
-                    "fields": [
-                        {
-                            "name": "name",
-                            "type": "string"
-                        },
-                        {
-                            "name": "sugar",
-                            "type": "double"
-                        },
-                        {
-                            "name": "fat",
-                            "type": "double"
-                        }
-                    ]
-                },
-                {
-                    "type": "record",
-                    "name": "Pizza",
-                    "fields": [
-                        {
-                            "name": "name",
-                            "type": "string"
-                        },
-                        {
-                            "name": "ingredients",
-                            "type": {
-                                "type": "array",
-                                "items": "Ingredient"
-                            }
-                        },
-                        {
-                            "name": "vegetarian",
-                            "type": "boolean"
-                        },
-                        {
-                            "name": "vegan",
-                            "type": "boolean"
-                        },
-                        {
-                            "name": "calories",
-                            "type": "int"
-                        }
-                    ]
-                },
-                "SEvent"
-            ]
-        }
-    ]
-})
+const socketEventType = avro.Type.forSchema({"type":"record","name":"SocketEvent","namespace":"io.surfkit.typebus.event","fields":[{"name":"meta","type":{"type":"record","name":"EventMeta","fields":[{"name":"eventId","type":"string"},{"name":"eventType","type":"string"},{"name":"source","type":"string"},{"name":"correlationId","type":["null","string"]},{"name":"userId","type":["null","string"],"default":null},{"name":"socketId","type":["null","string"],"default":null},{"name":"responseTo","type":["null","string"],"default":null},{"name":"extra","type":{"type":"map","values":"string"},"default":{}}]}},{"name":"payload","type":"bytes"}]})
+
 
 // We can use `type` to encode any values with the same structure:
 const bufs = [
-    pzType.toBuffer(sevent1)
+    pizzaType.toBuffer(pizza1)
 ];
 
-console.log("bufs: ", bufs)
+console.log("bufsz: ", bufs)
+console.log("back: ", pizzaType.fromBuffer(bufs[0]))
 
-console.log("back: ", pzType.fromBuffer(bufs[0]))
+const socketEvent = {
+    meta: {
+        eventId: "123",
+        eventType: "m.package.Pizza",
+        source: "",
+        correlationId: null,
+        userId: null,
+        socketId: "55",
+        responseTo: null,
+        extra: {}
+    },
+    payload: pizzaType.toBuffer(pizza1)
+}
+
+const bufs2 = [
+    socketEventType.toBuffer(socketEvent)
+];
+
+
+console.log("bufsz: ", bufs2)
+console.log("back: ", socketEventType.fromBuffer(bufs2[0]))
+
 
 const ws = new WebSocket("ws://localhost:8181/v1/ws/56e32f7e-8350-4892-8c9c-0fd6faea36f8")
 ws.onopen =  (event) => {
     console.log("WEBSOCKET IS CONNECTED !!!")
     //ws.send("Here's some text that the server is urgently awaiting!"); 
-    ws.send(pzType.toBuffer(sevent1))
+    ws.send(socketEventType.toBuffer(socketEvent))
 };

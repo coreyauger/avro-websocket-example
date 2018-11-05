@@ -14,7 +14,7 @@ import akka.http.scaladsl.model.ws._
 import akka.stream.{ActorMaterializer, ActorMaterializerSettings, Supervision}
 import akka.stream.OverflowStrategy
 import akka.stream.scaladsl._
-import io.surfkit.typebus.event.{SocketEvent, _}
+import m._
 import com.typesafe.config.ConfigFactory
 import java.nio.file._
 
@@ -23,6 +23,7 @@ import HttpMethods._
 import com.sksamuel.avro4s._
 import io.surfkit.actors.CoreActor
 import io.surfkit.typebus.module.Service
+import io.surfkit.typebus.event._
 import org.apache.avro.generic.GenericRecord
 
 object ActorPaths {
@@ -30,7 +31,7 @@ object ActorPaths {
   val coreActorPath = "/user/avro-websocket-example/core"
 }
 
-class CoreHttpService extends RouteDefinition with Service {
+class HttpService extends RouteDefinition with Service[m.Model] {
   implicit val system = context.system
   import system.dispatcher
 
@@ -38,14 +39,15 @@ class CoreHttpService extends RouteDefinition with Service {
     case _ => Supervision.Resume  // Never give up !
   }
 
+  val schema = AvroSchema[SocketEvent]
+  println(s"schema: \n${schema}")
+
   val config = ConfigFactory.load()
 
   implicit val materializer = ActorMaterializer(ActorMaterializerSettings(system).withSupervisionStrategy(decider))
 
-
   implicit val timeout = Timeout(10 seconds)
   val coreActor = Await.result(system.actorSelection(ActorPaths.coreActorPath).resolveOne(), timeout.duration)
-
 
   val wwwPath = config.getString("www.base-url")
   // If wwwPath not found on fs, we force useResourceDir to true
@@ -54,7 +56,7 @@ class CoreHttpService extends RouteDefinition with Service {
 
   println("CoreHttp is up and running !")
 
-  println(s"schema: \n${m.schema}")
+  //println(s"schema: \n${schema}")
 
   def route: Route =
       options {
@@ -77,68 +79,33 @@ class CoreHttpService extends RouteDefinition with Service {
         }
       }
 
-
-
-
   def coreInSink(userid: String, unique:UUID) = Sink.actorRef[CoreActor.ReceivedMessage](coreActor, CoreActor.Disconnect(userid,unique))
 
-  def coreFlow(userid: String, token: String, unique:UUID ): Flow[ByteString, SocketEvent[m.Model], akka.NotUsed] = {
+  def coreFlow(userid: String, token: String, unique:UUID ): Flow[ByteString, SocketEvent, akka.NotUsed] = {
     val uid = UUID.fromString(userid)
     val in =
       Flow[ByteString]
         .map{x =>
           println(s"Get the message: ${x}")
-
-
           try{
-            implicit object SocketEventFromRecord extends FromRecord[SocketEvent[m.Model]] {
-              override def apply(record: GenericRecord): SocketEvent[m.Model] = {
-                println("SocketEventFromRecord *****************")
-                println(s"record: ${record}")
-                println("")
-                null
-              }
-            }
-            /*implicit object PizzaFromRecord extends FromRecord[m.Pizza] {
-              override def apply(record: GenericRecord): m.Pizza = {
-                println("PizzaFromRecord *****************")
-                println(s"record: ${record}")
-                println("")
-                null
-              }
-            }*/
-
-            val schemax = AvroSchema[m.SEvent]
-            implicit val formatx = RecordFormat[m.SEvent]
-            val inx = new ByteArrayInputStream(x.toArray)
-            println(s"inx: ${inx}")
-            val inputx = AvroInputStream.binary[m.SEvent](inx)
-            println(s"inputx: ${inputx}")
-            println(s"inputx: ${inputx.iterator}")
-            val sevent = inputx.iterator.toSeq.head
-            println(s"input.iterator.toSeq: ${sevent}")
-
-
-            CoreActor.ReceivedMessage(userid, unique, SocketEvent[m.Model](correlationId = sevent.correlationId, occurredAt = org.joda.time.DateTime.now, payload = sevent.payload) )
-            /*
-
-
-            val schema = AvroSchema[SocketEvent[m.Model]]
-            implicit val format = RecordFormat[SocketEvent[m.Model]]
-            val in = new ByteArrayInputStream(x.toArray)
-            val input = AvroInputStream.binary[SocketEvent[m.Model]](in)
+            val schema = AvroSchema[SocketEvent]
+            val input = AvroInputStream.binary[SocketEvent].from(x.toArray).build(schema)
+            println(s"coreFlow input: ${input}")
+            println(s"coreFlow inputx: ${input.iterator}")
             val result = input.iterator.toSeq
-            val event = result.head
-            //logger.info(s"obj: ${obj}")
-            CoreActor.ReceivedMessage(userid, unique, event)*/
+            val socketEvent = result.head
+            println(s"coreFlow Event Type: ${socketEvent.meta.eventType}")
+
+            CoreActor.ReceivedMessage(userid, unique, socketEvent)
           }catch{
             case t: Throwable =>
               t.printStackTrace()
-              CoreActor.ReceivedMessage(userid, unique,SocketEvent(
+              throw t
+              /*CoreActor.ReceivedMessage(userid, unique,SocketEvent(
                 correlationId = UUID.randomUUID().toString,
                 occurredAt = new org.joda.time.DateTime(),
                 payload =  null//m.Error(t.getMessage)
-              ))
+              ))*/
           }
 
         }
@@ -147,7 +114,7 @@ class CoreHttpService extends RouteDefinition with Service {
     // materialization where the coreActor will send its messages to.
     // This source will only buffer n element and will fail if the client doesn't read
     // messages fast enough.
-    val out = Source.actorRef[SocketEvent[m.Model]](32, OverflowStrategy.fail)
+    val out = Source.actorRef[SocketEvent](32, OverflowStrategy.fail)
       .mapMaterializedValue(coreActor ! CoreActor.Connect(userid, unique, _, token))
     Flow.fromSinkAndSource(in, out)//(Keep.none)
   }
@@ -166,12 +133,12 @@ class CoreHttpService extends RouteDefinition with Service {
           println(s"WebSocket Got binary")
           //other.dataStream.runWith(Sink.ignore)
           Future.successful(msg)
-        /*case BinaryMessage.Streamed(stream) =>
+        case BinaryMessage.Streamed(stream) =>
           stream
             .limit(100) // Max frames we are willing to wait for
             .completionTimeout(5 seconds) // Max time until last frame
             .runFold(ByteString.empty)(_ + _) // Merges the frames
-            .flatMap(msg => Future.successful(msg))*/
+            .flatMap(msg => Future.successful(msg))
       }.mapAsync(parallelism = 3)(identity)
       .via(coreFlow(sender, token, UUID.randomUUID())) // ... and route them through the chatFlow ...
       // client now sends this..
@@ -183,15 +150,15 @@ class CoreHttpService extends RouteDefinition with Service {
         )
       )*/
       .map {
-        case x: SocketEvent[_] => {
+        case x: SocketEvent => {
           //logger.info(s"DOWN THE SOCKET: ${x.payload.getClass.getName}")
           try {
-            //BinaryMessage.Strict(ByteString(pickler.writeValue(x)) )
-            // FIX:ME
+            val schema = AvroSchema[SocketEvent]
             val baos = new ByteArrayOutputStream()
-            val output = AvroOutputStream.binary[SocketEvent[m.Model]](baos)
+            val output = AvroOutputStream.binary[SocketEvent].to(baos).build(schema)
             output.write(x)
             output.close()
+            println(s"payload bytes: ${baos.toByteArray}")
             BinaryMessage.Strict(ByteString(baos.toByteArray))
           } catch {
             case t: Throwable =>

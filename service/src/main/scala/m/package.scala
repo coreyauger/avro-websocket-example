@@ -1,9 +1,6 @@
-import java.util.UUID
-
 import com.sksamuel.avro4s.{AvroSchema, RecordFormat}
-import com.sksamuel.avro4s.{FromRecord, RecordFormat, SchemaFor, ToRecord}
+import com.sksamuel.avro4s.{RecordFormat, SchemaFor, ToRecord, FromRecord}
 import org.apache.avro.generic.GenericRecord
-import org.joda.time.DateTime
 
 package object m {
 

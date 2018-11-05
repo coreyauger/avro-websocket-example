@@ -12,71 +12,22 @@ import akka.util.Timeout
 import scala.concurrent.duration._
 import com.sksamuel.avro4s._
 import io.surfkit.typebus.{ByteStreamReader, ByteStreamWriter}
-import m._
+import com.typesafe.config.ConfigFactory
+import org.apache.kafka.clients.producer.KafkaProducer
+import io.surfkit.typebus.actors.ProducerActor
+import io.surfkit.typebus.event._
 
 object CoreActor {
 
   sealed trait Socket
   case class Connect(uuid: String, socketId:UUID, subscriber: ActorRef, token: String) extends Socket
   case class Disconnect(uuid: String, socketId:UUID) extends Socket
-  case class ReceivedMessage(uuid: String, socketId:UUID, data: SocketEvent[m.Model]) extends Socket {
-    def toPublishedEvent:PublishedEvent[m.Model] = PublishedEvent(
-      eventId = UUID.randomUUID().toString,
-      eventType = data.payload.getClass.getCanonicalName,
-      source = "",
-      userIdentifier = Some(uuid.toString),
-      socketId = Some(socketId.toString),
-      correlationId = Some(data.correlationId.toString),
-      occurredAt = new DateTime,
-      publishedAt = new DateTime,
+  case class ReceivedMessage(uuid: String, socketId:UUID, data: SocketEvent) extends Socket {
+    def toPublishedEvent:PublishedEvent = PublishedEvent(
+      meta = data.meta,
       payload = data.payload)
 
   }
-
-  import m.format
-
-
-  implicit val typeBusIngrediantWriter = new ByteStreamWriter[PublishedEvent[Ingredient]]{
-    override def write(value: PublishedEvent[Ingredient]): Array[Byte] = {
-      val baos = new ByteArrayOutputStream()
-      val output = AvroOutputStream.binary[PublishedEvent[Ingredient]](baos)
-      output.write(value)
-      output.close()
-      baos.toByteArray
-    }
-  }
-
-
-  implicit val typeBusPizaWriter = new ByteStreamWriter[PublishedEvent[Pizza]]{
-    override def write(value: PublishedEvent[Pizza]): Array[Byte] = {
-      val baos = new ByteArrayOutputStream()
-      val output = AvroOutputStream.binary[PublishedEvent[Pizza]](baos)
-      output.write(value)
-      output.close()
-      baos.toByteArray
-    }
-  }
-
-  /*
-
-
-  object avroMapper extends io.surfkit.typebus.Mapper {
-    def writeValue[T : SchemaFor : ToRecord ](value: T): Array[Byte] = {
-      val baos = new ByteArrayOutputStream()
-      val output = AvroOutputStream.binary[T](baos)
-      output.write(value)
-      output.close()
-      baos.toByteArray
-    }
-
-    def readValue[T : SchemaFor : FromRecord](content: Array[Byte]): T = {
-      //mapper.readValue(content, scala.reflect.classTag[T].runtimeClass.asInstanceOf[Class[T]])
-      val in = new ByteArrayInputStream(content)
-      val input = AvroInputStream.binary[T](in)
-      val result = input.iterator.toSeq
-      result.head
-    }
-  }*/
 }
 
 class CoreActor extends Actor with ActorLogging {
@@ -84,6 +35,18 @@ class CoreActor extends Actor with ActorLogging {
   var subscriberToUserId = Map.empty[ActorRef, String]
   var socketIdToSubscriber = Map.empty[UUID, ActorRef]  // HACK: way to handle Disconnect faster then "actor.watch"
   import CoreActor._
+
+
+  val kafka = ConfigFactory.load.getString("bus.kafka")
+  import collection.JavaConversions._
+  val producer = new KafkaProducer[Array[Byte], Array[Byte]](Map(
+    "bootstrap.servers" -> kafka,
+    "key.serializer" ->  "org.apache.kafka.common.serialization.ByteArraySerializer",
+    "value.serializer" -> "org.apache.kafka.common.serialization.ByteArraySerializer"
+  ))
+
+
+  val bus = system.actorOf(ProducerActor.props(producer))
 
   implicit val timeout = Timeout(10 seconds)
 
@@ -100,6 +63,13 @@ class CoreActor extends Actor with ActorLogging {
       // CA - record stats
       val produce = msg.toPublishedEvent
       println(s"TO PUBLISH EVENT: ${produce}")
+      try {
+        bus ! produce
+      }catch{
+        case t: Throwable =>
+          println(s"ERROR: ${t}")
+          t.printStackTrace()
+      }
       //ClusterStats.inc(ClusterStats.StatCategory.Socket, coreMessage.data.getClass.getName)
       //if(!produce.payload.isInstanceOf[m.Hb]) { // don't log heartbeat..
       //  log.info(s"ReceivedMessage for user(${msg.uuid}):  ${produce}")
@@ -117,6 +87,7 @@ class CoreActor extends Actor with ActorLogging {
         subscriberToUserId -= s
         socketIdToSubscriber -= socketId
       }
+
     case Terminated(sub) =>
       log.info("Terminated")
       subscriberToUserId.get(sub).foreach{ uuid =>

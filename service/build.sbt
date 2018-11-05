@@ -1,4 +1,4 @@
-name := "avro-server"
+name := "avro-service"
 
 version := "0.0.1-SNAPSHOT"
 
@@ -19,7 +19,8 @@ val squbsV = "0.11.0"
 
 libraryDependencies ++= Seq(
   "org.squbs" %% "squbs-unicomplex" % squbsV,
-  "com.sksamuel.avro4s" %% "avro4s-core" % "1.9.0",
+  "com.typesafe.akka"       %% "akka-cluster" % akkaV,
+  "com.sksamuel.avro4s" %% "avro4s-core" % "2.0.2",
   "io.surfkit" %% "type-bus" % "0.0.5-SNAPSHOT"
 )
 
